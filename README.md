@@ -1,41 +1,57 @@
 # Meine Bücher
 
-Eine mobile Web-App für die eigene Bücher-Bibliothek – als reine
-HTML/CSS/JS-Anwendung, die direkt über **GitHub Pages** läuft. Kein Server,
-keine Installation, kein Wert-/Preistracking – nur Bücher und ihre
-Merkmale.
+Eine mobile Bücher-Bibliothek als reine HTML/CSS/JS-App, die direkt über
+**GitHub Pages** läuft. Kein Server, keine Installation, kein Wert-/
+Preistracking – nur Bücher und ihre Merkmale.
 
-Optisch und funktional angelehnt an die "BigBox PC Sammlung"-Desktop-App,
-aber für Bücher und für's Handy gebaut.
+Diese App ist direkt aus der `docs/index.html` der
+[BigBox-PC-Sammlung](https://github.com/Osmodia666/BigBox-PC-Sammlung)
+übernommen (dort läuft dieselbe Architektur schon als mobile Web-App für
+die PC-Spielesammlung) und für Bücher umgebaut: gleiche Regal-/Such-/
+Sync-Oberfläche, aber mit buch-typischen Feldern statt Spiele-Feldern und
+ganz ohne Geldwert.
 
 ## Funktionen
 
-- Bücher anlegen, bearbeiten, löschen
-- Merkmale: Titel, Autor, Verlag, Jahr, ISBN, Genre, Sprache, Ausgabe
-  (Hardcover/Taschenbuch/Ebook/Hörbuch/Sonderausgabe), Zustand, Reihe/Band,
-  Seitenzahl, Gelesen (Ja/Nein), Erstausgabe (Ja/Nein), Notizen, Cover
-- Regal-Ansicht (Cover-Kacheln) und Listen-Ansicht
-- Suche (Titel, Autor, Verlag, Jahr, ISBN, Genre, Reihe) und Sortierung
-- Filter: Alle / Gelesen / Ungelesen
-- Cover-Bild selbst hochladen **oder** Titel, Autor, Verlag, Jahr, ISBN,
-  Seitenzahl und Cover automatisch über die offene Google-Books-API laden
-  (kein API-Key nötig)
-- Links zu Wikipedia und Goodreads für das ausgewählte Buch
-- Als "App" auf dem Homescreen installierbar (PWA mit Offline-Grundgerüst)
-- Export/Import als JSON-Datei zum Sichern oder Übertragen auf ein anderes
-  Gerät
+- **Regal-Ansicht**: Bücher als Buchrücken auf Holzregalen, alphabetisch
+  in Reihen gruppiert
+- **Suche**: nach Titel, Autor, Verlag, ISBN, Genre, Jahr, mit Sortierung
+  (Titel, Seiten, Jahr, Autor) und Filter-Chips (Ausgabe, Zustand)
+- **Merkmale pro Buch**: Titel, Autor, Verlag, Jahr, ISBN, Genre, Sprache,
+  Ausgabe (Hardcover/Taschenbuch/Ebook/Hörbuch/Sonderausgabe), Zustand,
+  Notizen, Gelesen (Ja/Nein), Tauschbar (Ja/Nein), Cover — **kein
+  Geldwert**
+- **Cover & Metadaten automatisch laden**: Titel eingeben und "Bei Google
+  Books suchen" liefert Autor/Verlag/Jahr/ISBN/Seitenzahl/Cover in einem
+  Aufruf, ganz ohne eigenen API-Key
+- **ISBN-Barcode scannen**: Foto vom Barcode aufnehmen (Kamera-Button) –
+  die erkannte ISBN wird automatisch bei Google Books nachgeschlagen und
+  füllt leere Felder plus Cover aus
+- **Bestand & Statistik**: Anzahl, Gelesen-Quote, Seiten gesamt/Ø Seiten
+  pro Buch, Jahresspanne, Verteilung nach Zustand/Ausgabe/Genre
+- **Tauschbörse**: eigene tauschbare Bücher markieren, als Datei
+  veröffentlichen und Freunde über deren Einladungslink verfolgen
+- **Sync**: WebDAV (Nextcloud & Co.) und Google Drive, jeweils mit
+  Push/Pull und Bestätigungsdialog vor dem Überschreiben; alternativ
+  manueller CSV-Export/-Import
+- **Einstellungen sichern/wiederherstellen** als separate Backup-Datei
+- Als "App" auf dem Homescreen installierbar (PWA-Manifest)
 
 ## Daten & Speicherung
 
-Alle Bücher werden ausschließlich lokal im Browser gespeichert
-(`localStorage`), gerätegebunden. Es gibt keinen Server und kein Konto –
-über "⚙ Sichern & Übertragen" lässt sich die Sammlung als Datei
-exportieren und auf einem anderen Gerät wieder importieren.
+Die Bücher liegen in **IndexedDB** im Browser (großzügiges Kontingent,
+verträgt eingebettete Cover-Bilder), Einstellungen (Sync-Zugangsdaten,
+Freundesliste) in `localStorage` – beides gerätegebunden. Es gibt keinen
+eigenen Server und kein Konto. Für mehrere Geräte: unter **Mehr → Sync**
+entweder WebDAV/Google Drive verbinden oder die CSV-Datei manuell
+exportieren/importieren.
 
 ## GitHub Pages einrichten
 
-1. Im Repository unter **Settings → Pages** als Source den Branch
-   auswählen, auf dem diese Dateien liegen (Ordner `/ (root)`).
+Diese App liegt bewusst unter `docs/`, genau wie bei der BigBox-PC-Sammlung:
+
+1. Im Repository unter **Settings → Pages** als Source diesen Branch mit
+   Ordner **`/docs`** auswählen.
 2. Nach ein bis zwei Minuten ist die App unter der angezeigten
    `github.io`-URL erreichbar.
 3. Auf dem Handy die Seite öffnen und über "Zum Home-Bildschirm
@@ -44,11 +60,8 @@ exportieren und auf einem anderen Gerät wieder importieren.
 
 ## Lokal testen
 
-Da die App `fetch()` nutzt, reicht ein einfaches Doppelklicken auf
-`index.html` nicht überall aus (CORS) – am zuverlässigsten mit einem
-kleinen lokalen Server:
-
 ```bash
+cd docs
 python3 -m http.server 8000
 ```
 
