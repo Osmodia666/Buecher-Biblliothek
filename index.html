@@ -113,7 +113,7 @@ input,select,textarea,button{font-family:inherit}
 .tab.active{color:var(--brass-bright)}
 .tab .ic{font:400 18px/1 'IBM Plex Mono',monospace}
 .tab .lb{font:500 9.5px/1 'IBM Plex Sans',sans-serif;letter-spacing:.02em}
-.fab{pointer-events:auto;position:absolute;left:50%;top:0;transform:translate(-50%,-58%);width:56px;height:56px;border-radius:50%;background:linear-gradient(160deg,var(--brass-bright),var(--brass));border:4px solid var(--paper);box-shadow:0 8px 18px -6px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1c1a16;font:400 26px/1 'IBM Plex Sans',sans-serif}
+.fab{pointer-events:auto;position:absolute;left:66.667%;top:0;transform:translate(-50%,-58%);width:56px;height:56px;border-radius:50%;background:linear-gradient(160deg,var(--brass-bright),var(--brass));border:4px solid var(--paper);box-shadow:0 8px 18px -6px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1c1a16;font:400 26px/1 'IBM Plex Sans',sans-serif}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .fab{border-color:var(--paper)} }
 :root[data-theme="dark"] .fab{border-color:var(--paper)}
 
@@ -630,11 +630,13 @@ function pushToGDrive(){
   });
 }
 
-/* ---------------- Google Books (kein API-Key nötig) ----------------
-   Ersetzt den RAWG/IGDB-Abgleich der PC-Spielesammlung: Google Books
-   liefert Titel/Autor/Verlag/Jahr/ISBN/Seitenzahl UND ein Cover in
-   einem einzigen, öffentlichen Aufruf - niemand muss sich dafür
-   irgendwo registrieren oder einen Schlüssel eintragen. */
+/* ---------------- Buchsuche: Google Books + Open Library als Fallback ----------------
+   Ersetzt den RAWG/IGDB-Abgleich der PC-Spielesammlung: liefert
+   Titel/Autor/Verlag/Jahr/ISBN/Seitenzahl UND ein Cover, ganz ohne
+   eigenen API-Key. Google Books hat ohne Schlüssel ein ziemlich
+   knappes anonymes Rate-Limit (HTTP 429, teilt sich alle Nutzer ohne
+   Key) - schlägt der Abruf fehl, wird automatisch bei Open Library
+   nachgeschaut (grosszügigeres Limit, ebenfalls kein Key nötig). */
 function googleBooksFetch(query){
   var url = "https://www.googleapis.com/books/v1/volumes?q=" + encodeURIComponent(query) + "&maxResults=1";
   return fetch(url).then(function(r){ if(!r.ok) throw new Error("Google Books: HTTP "+r.status); return r.json(); })
@@ -676,6 +678,57 @@ function urlToBase64(url){
         reader.readAsDataURL(blob);
       });
     });
+}
+
+function openLibrarySearch(query){
+  var url = "https://openlibrary.org/search.json?q=" + encodeURIComponent(query) + "&limit=1&fields=title,author_name,first_publish_year,publisher,number_of_pages_median,isbn,cover_i";
+  return fetch(url).then(function(r){ if(!r.ok) throw new Error("Open Library: HTTP "+r.status); return r.json(); })
+    .then(function(data){
+      var doc = data.docs && data.docs[0];
+      if(!doc) throw new Error("Kein Treffer bei Open Library.");
+      var isbn = (doc.isbn && doc.isbn[0]) || "";
+      return {
+        titel: doc.title || "",
+        autor: (doc.author_name||[]).join(" / "),
+        verlag: (doc.publisher||[])[0] || "",
+        jahr: doc.first_publish_year ? String(doc.first_publish_year) : "",
+        isbn: isbn,
+        seiten: doc.number_of_pages_median ? String(doc.number_of_pages_median) : "",
+        coverURL: doc.cover_i ? ("https://covers.openlibrary.org/b/id/"+doc.cover_i+"-L.jpg") : (isbn ? ("https://covers.openlibrary.org/b/isbn/"+isbn+"-L.jpg") : "")
+      };
+    });
+}
+function openLibraryByIsbn(isbn){
+  var url = "https://openlibrary.org/api/books?bibkeys=" + encodeURIComponent("ISBN:"+isbn) + "&format=json&jscmd=data";
+  return fetch(url).then(function(r){ if(!r.ok) throw new Error("Open Library: HTTP "+r.status); return r.json(); })
+    .then(function(data){
+      var d = data["ISBN:"+isbn];
+      if(!d) throw new Error("Kein Treffer bei Open Library.");
+      var cover = d.cover || {};
+      return {
+        titel: d.title || "",
+        autor: (d.authors||[]).map(function(a){ return a.name; }).join(" / "),
+        verlag: (d.publishers||[]).map(function(p){ return p.name; })[0] || "",
+        jahr: d.publish_date ? String(d.publish_date).slice(-4) : "",
+        isbn: isbn,
+        seiten: d.number_of_pages ? String(d.number_of_pages) : "",
+        coverURL: cover.large || cover.medium || cover.small || ""
+      };
+    });
+}
+function bookLookupByTitle(titel, autor){
+  return googleBooksFetchByTitle(titel, autor).catch(function(gErr){
+    return openLibrarySearch(titel + (autor ? " " + autor : "")).catch(function(oErr){
+      throw new Error("Google Books: " + gErr.message + " · Open Library: " + oErr.message);
+    });
+  });
+}
+function bookLookupByIsbn(isbn){
+  return googleBooksFetchByIsbn(isbn).catch(function(gErr){
+    return openLibraryByIsbn(isbn).catch(function(oErr){
+      throw new Error("Google Books: " + gErr.message + " · Open Library: " + oErr.message);
+    });
+  });
 }
 
 /* downscale + compress a captured photo to keep storage lean */
@@ -971,11 +1024,11 @@ function viewEdit(){
   html += '<div class="field"><div class="lb">ISBN-Barcode scannen</div>'+
     '<input type="file" accept="image/*" capture="environment" class="filepick" id="scanPhoto">'+
     '<button class="btn ghost full" id="btnStartScan" '+(state.scanBusy?'disabled':'')+'>'+(state.scanBusy?'<span class="spin"></span>Erkenne…':'Barcode fotografieren')+'</button>'+
-    '<div class="pcnote">Foto vom Barcode auf der Buchrückseite aufnehmen. Die erkannte ISBN wird automatisch bei Google Books nachgeschlagen und füllt leere Felder darunter sowie das Cover aus.</div>'+
+    '<div class="pcnote">Foto vom Barcode auf der Buchrückseite aufnehmen. Die erkannte ISBN wird automatisch online nachgeschlagen und füllt leere Felder darunter sowie das Cover aus.</div>'+
   '</div>';
 
   html += '<div class="field"><div class="lb">Titel</div><input type="text" id="f_titel" placeholder="Titel eingeben…" value="'+esc(b.titel)+'">'+
-    '<button class="btn primary full" style="margin-top:9px" id="btnMatch" '+(state.matchBusy?'disabled':'')+'>'+(state.matchBusy?'<span class="spin"></span>Suche läuft…':'Bei Google Books suchen')+'</button></div>';
+    '<button class="btn primary full" style="margin-top:9px" id="btnMatch" '+(state.matchBusy?'disabled':'')+'>'+(state.matchBusy?'<span class="spin"></span>Suche läuft…':'Buch online suchen')+'</button></div>';
 
   if(state.matchResult){
     var m = state.matchResult;
@@ -1128,7 +1181,7 @@ function wireEvents(root){
         state.addFlow = Object.assign({}, state.addFlow || BLANK_BOOK, { isbn: isbn });
         showToast("ISBN erkannt: " + isbn + " – suche bei Google Books…");
         render();
-        googleBooksFetchByIsbn(isbn).then(function(res){
+        bookLookupByIsbn(isbn).then(function(res){
           var cur = state.addFlow || BLANK_BOOK;
           var patch = { isbn: isbn };
           if(!cur.titel) patch.titel = res.titel;
@@ -1167,7 +1220,7 @@ function wireEvents(root){
       var autor = autorFld ? autorFld.value.trim() : "";
       state.addFlow = Object.assign({}, state.addFlow || BLANK_BOOK, { titel: titel });
       state.matchBusy = true; state.matchResult = null; render();
-      googleBooksFetchByTitle(titel, autor).then(function(res){
+      bookLookupByTitle(titel, autor).then(function(res){
         if(!res.coverURL){ state.matchBusy = false; state.matchResult = res; render(); return; }
         return urlToBase64(res.coverURL).then(function(b64){
           res.coverBase64 = b64;
