@@ -19,7 +19,7 @@ ganz ohne Geldwert.
   (Titel, Seiten, Jahr, Autor) und Filter-Chips (Ausgabe, Zustand)
 - **Merkmale pro Buch**: Titel, Autor, Verlag, Jahr, ISBN, Genre, Sprache,
   Ausgabe (Hardcover/Taschenbuch/Ebook/Hörbuch/Sonderausgabe), Zustand,
-  Notizen, Gelesen (Ja/Nein), Tauschbar (Ja/Nein), Cover — **kein
+  Notizen, Gelesen (Ja/Nein), Sterne-Bewertung (1–5), Cover — **kein
   Geldwert**
 - **Cover & Metadaten automatisch laden**: Titel eingeben und "Bei Google
   Books suchen" liefert Autor/Verlag/Jahr/ISBN/Seitenzahl/Cover in einem
@@ -28,9 +28,8 @@ ganz ohne Geldwert.
   die erkannte ISBN wird automatisch bei Google Books nachgeschlagen und
   füllt leere Felder plus Cover aus
 - **Bestand & Statistik**: Anzahl, Gelesen-Quote, Seiten gesamt/Ø Seiten
-  pro Buch, Jahresspanne, Verteilung nach Zustand/Ausgabe/Genre
-- **Tauschbörse**: eigene tauschbare Bücher markieren, als Datei
-  veröffentlichen und Freunde über deren Einladungslink verfolgen
+  pro Buch, Ø Bewertung, Jahresspanne, Verteilung nach
+  Zustand/Ausgabe/Genre
 - **Sync**: WebDAV (Nextcloud & Co.) und Google Drive, jeweils mit
   Push/Pull und Bestätigungsdialog vor dem Überschreiben; alternativ
   manueller CSV-Export/-Import
@@ -40,11 +39,10 @@ ganz ohne Geldwert.
 ## Daten & Speicherung
 
 Die Bücher liegen in **IndexedDB** im Browser (großzügiges Kontingent,
-verträgt eingebettete Cover-Bilder), Einstellungen (Sync-Zugangsdaten,
-Freundesliste) in `localStorage` – beides gerätegebunden. Es gibt keinen
-eigenen Server und kein Konto. Für mehrere Geräte: unter **Mehr → Sync**
-entweder WebDAV/Google Drive verbinden oder die CSV-Datei manuell
-exportieren/importieren.
+verträgt eingebettete Cover-Bilder), Sync-Zugangsdaten in `localStorage`
+– beides gerätegebunden. Es gibt keinen eigenen Server und kein Konto.
+Für mehrere Geräte: unter **Mehr → Sync** entweder WebDAV/Google Drive
+verbinden oder die CSV-Datei manuell exportieren/importieren.
 
 ## GitHub Pages
 
