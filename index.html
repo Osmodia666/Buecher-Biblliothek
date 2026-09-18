@@ -80,11 +80,6 @@ input,select,textarea,button{font-family:inherit}
 .shelf-plank{height:9px;border-radius:2px;background:linear-gradient(#c9c1b4,#a89e8d);box-shadow:0 3px 6px rgba(0,0,0,.18);margin:0 6px}
 .shelf-plank-shadow{height:5px;margin:0 15px;border-radius:0 0 3px 3px;background:#8f8676}
 
-.tradebadge{position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:#3d8bfd;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.4);z-index:2}
-.tradebadge svg{width:12px;height:12px;display:block}
-.tradebadge.sm{width:16px;height:16px;top:3px;right:3px}
-.tradebadge.sm svg{width:9px;height:9px}
-
 .list{padding:0 16px 20px;display:flex;flex-direction:column;gap:8px}
 .card{display:flex;align-items:center;gap:11px;padding:11px 12px;background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;cursor:pointer;text-align:left}
 .thumb{width:40px;height:52px;border-radius:4px;flex:none;background-size:cover;background-position:center;position:relative}
@@ -97,8 +92,10 @@ input,select,textarea,button{font-family:inherit}
 .badge.warn{background:var(--warn-bg);color:var(--warn)}
 .badge.bad{background:var(--bad-bg);color:var(--bad)}
 .badge.neutral{background:var(--neutral-bg);color:var(--ink-dim)}
-.badge.trade{background:var(--brass-bright);color:#1c1a16}
 .pages{font:600 12px/1 'IBM Plex Mono',monospace;color:var(--ink)}
+.stars{color:var(--brass-bright);font-size:12px;letter-spacing:1px;white-space:nowrap}
+.starsrow{display:flex;gap:6px}
+.starbtn{background:none;border:0;font-size:28px;line-height:1;cursor:pointer;color:var(--brass-bright);padding:2px}
 .empty{padding:40px 24px;text-align:center;font:400 13px/1.6 'IBM Plex Sans',sans-serif;color:var(--ink-dim)}
 
 .searchbar{display:flex;align-items:center;gap:9px;background:var(--shelf-raised);border:1px solid var(--shelf-line);border-radius:11px;padding:11px 13px}
@@ -201,10 +198,10 @@ input,select,textarea,button{font-family:inherit}
 
 /* ---------------- desktop / wide-viewport layout ----------------
    Below this width the app is the single-column phone layout as-is.
-   Above it: browse screens (Regal, Suche, Wunschliste) widen into
-   multi-column grids so the screen gets used; detail/edit/settings
-   screens stay a comfortable, centered reading width instead of
-   stretching form fields edge to edge. */
+   Above it: browse screens (Regal, Suche) widen into multi-column
+   grids so the screen gets used; detail/edit/settings screens stay
+   a comfortable, centered reading width instead of stretching form
+   fields edge to edge. */
 @media (min-width: 760px){
   .app{max-width:1180px}
   .bar{padding-left:32px;padding-right:32px}
@@ -230,97 +227,27 @@ input,select,textarea,button{font-family:inherit}
 
 var SEED_BOOKS = [];
 
-var CSV_HEADER = "Titel|Sprache|Ausgabe|Zustand|Notizen|Gelesen|Verlag|Jahr|Autor|ISBN|CoverBase64|CoverExt|Genre|Seiten|Tauschbar";
-var CSV_KEYS = ["titel","sprache","ausgabe","zustand","notizen","gelesen","verlag","jahr","autor","isbn","coverBase64","coverExt","genre","seiten","tauschbar"];
+var CSV_HEADER = "Titel|Sprache|Ausgabe|Zustand|Notizen|Gelesen|Verlag|Jahr|Autor|ISBN|CoverBase64|CoverExt|Genre|Seiten|Bewertung";
+var CSV_KEYS = ["titel","sprache","ausgabe","zustand","notizen","gelesen","verlag","jahr","autor","isbn","coverBase64","coverExt","genre","seiten","bewertung"];
 var STORAGE_KEY = "buecher:books:v1";
 var META_KEY = "buecher:meta:v1";
 var NC_KEY = "buecher:nextcloud:v1";
-var FRIENDS_KEY = "buecher:friends:v1";
-var PROFILE_KEY = "buecher:profile:v1";
 
 function slug(s){ return String(s||"").trim().toLowerCase(); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function parseSeiten(v){ var n = parseInt(String(v||"").replace(/[^0-9]/g,""),10); return isNaN(n) ? 0 : n; }
+function parseBewertung(v){ var n = parseInt(v,10); return (n>=1 && n<=5) ? n : 0; }
+function starsHtml(n, cls){ n = parseBewertung(n); var s=""; for(var i=1;i<=5;i++){ s += (i<=n?"★":"☆"); } return '<span class="'+(cls||"stars")+'">'+s+'</span>'; }
 function loadMeta(){ try{ return JSON.parse(localStorage.getItem(META_KEY)) || {}; }catch(e){ return {}; } }
 function saveMeta(m){ try{ localStorage.setItem(META_KEY, JSON.stringify(m)); }catch(e){} }
 function loadNC(){ try{ return JSON.parse(localStorage.getItem(NC_KEY)) || {}; }catch(e){ return {}; } }
 function saveNC(m){ try{ localStorage.setItem(NC_KEY, JSON.stringify(m)); }catch(e){} }
-function loadFriends(){ try{ return JSON.parse(localStorage.getItem(FRIENDS_KEY)) || []; }catch(e){ return []; } }
-function saveFriends(list){ try{ localStorage.setItem(FRIENDS_KEY, JSON.stringify(list)); }catch(e){} }
-function loadProfile(){ try{ return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}; }catch(e){ return {}; } }
-function saveProfile(p){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
-
-/* ---------------- Tauschliste (peer-to-peer trade sharing) ----------------
-   No backend of our own: each collector publishes a small JSON file
-   (only their tauschbar=Ja books) at any public URL they control (e.g.
-   a Nextcloud public share link) and shares that URL as an "invite
-   link". Friends' devices just fetch() that URL directly - nothing
-   flows through us. */
-function buildTauschliste(){
-  var profile = loadProfile();
-  var books = state.books.filter(function(b){ return b.tauschbar === "Ja"; }).map(function(b){
-    return { titel:b.titel, jahr:b.jahr, verlag:b.verlag, autor:b.autor, ausgabe:b.ausgabe, zustand:b.zustand, genre:b.genre, coverBase64:b.coverBase64, coverExt:b.coverExt };
-  });
-  return { owner: profile.displayName || "Unbenannt", updatedAt: Date.now(), books: books };
-}
-function exportTauschlisteFile(){
-  var blob = new Blob([JSON.stringify(buildTauschliste(), null, 2)], {type:"application/json"});
-  var a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "tauschliste.json";
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
-}
-function pushTauschlisteToNextcloud(){
-  var nc = loadNC();
-  if(!nc.url) return Promise.reject(new Error("Keine Nextcloud-Verbindung eingerichtet."));
-  var siblingUrl = nc.url.replace(/[^/]*$/, "tauschliste.json");
-  return fetch(siblingUrl, {
-    method: "PUT",
-    headers: { "Authorization": ncAuthHeader(nc), "Content-Type": "application/json" },
-    body: JSON.stringify(buildTauschliste(), null, 2)
-  }).then(function(res){ if(!res.ok) throw new Error("HTTP "+res.status); return siblingUrl; });
-}
-
-var FRIEND_SEEN_KEY = "buecher:friendseen:v1";
-function loadFriendSeen(){ try{ return JSON.parse(localStorage.getItem(FRIEND_SEEN_KEY)) || {}; }catch(e){ return {}; } }
-function saveFriendSeen(m){ try{ localStorage.setItem(FRIEND_SEEN_KEY, JSON.stringify(m)); }catch(e){} }
-
-var friendDataCache = {}; /* url -> {status:'loading'|'ok'|'error', owner, books, error, newTitles} */
-function fetchFriendList(friend){
-  friendDataCache[friend.url] = { status: "loading" };
-  fetch(friend.url, { cache: "no-store" })
-    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .then(function(data){
-      var books = Array.isArray(data.books) ? data.books : [];
-      var owner = data.owner || friend.name;
-      var seenAll = loadFriendSeen();
-      var prevTitles = seenAll[friend.url];
-      var newTitles = [];
-      if(prevTitles){
-        var prevSet = {};
-        prevTitles.forEach(function(n){ prevSet[n] = true; });
-        newTitles = books.map(function(b){ return b.titel; }).filter(function(n){ return !prevSet[n]; });
-      }
-      seenAll[friend.url] = books.map(function(b){ return b.titel; });
-      saveFriendSeen(seenAll);
-      friendDataCache[friend.url] = { status: "ok", owner: owner, books: books, newTitles: newTitles };
-      if(prevTitles && newTitles.length){
-        showToast(owner + ": " + newTitles.length + (newTitles.length===1?" neues tauschbares Buch":" neue tauschbare Bücher"));
-      }
-      if(state.view === "wishlist") render();
-    })
-    .catch(function(err){
-      friendDataCache[friend.url] = { status: "error", error: err.message + " (Link falsch, nicht öffentlich erreichbar, oder Server erlaubt keine Browser-Anfragen/CORS)" };
-      if(state.view === "wishlist") render();
-    });
-}
 
 /* ---------------- storage (IndexedDB) ----------------
    localStorage has a ~5-10MB per-origin quota; a real collection with
    embedded base64 cover images blows well past that. IndexedDB has a
    much larger quota and is built for exactly this. Books live there;
-   small settings (meta/nextcloud/friends/profile) stay in localStorage. */
+   small settings (meta/nextcloud) stay in localStorage. */
 var IDB_NAME = "buecher-db";
 var IDB_STORE = "kv";
 var BOOKS_IDB_KEY = "books";
@@ -440,16 +367,6 @@ function coverMime(ext){
   return "image/jpeg";
 }
 function hasCover(b){ return !!(b && b.coverBase64); }
-function tauschbarBadge(b){ return (b && b.tauschbar==="Ja") ? '<span class="badge trade">Tauschbar</span>' : ''; }
-/* Kleines rundes Abzeichen mit Tausch-Pfeilen fuers Cover. */
-function tradeIconHtml(small){
-  return '<div class="tradebadge'+(small?' sm':'')+'" title="Tauschbar">'+
-    '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">'+
-      '<path d="M17 2l4 4-4 4"/><path d="M3 12v-2a4 4 0 0 1 4-4h14"/>'+
-      '<path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 0 1-4 4H3"/>'+
-    '</svg>'+
-  '</div>';
-}
 function coverBgStyle(b){
   if(hasCover(b)) return "background-image:url('data:"+coverMime(b.coverExt)+";base64,"+b.coverBase64+"')";
   var color = genreColor(b && b.genre);
@@ -498,13 +415,7 @@ function scheduleAutoPush(){
   if(!nc.url && !gd.fileId) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(function(){
-    if(nc.url){
-      pushToNextcloud();
-      /* Keeps the published tauschliste.json (if any books are marked
-         tauschbar) in step with every local edit - no separate manual
-         "veröffentlichen" step needed once Nextcloud is connected once. */
-      pushTauschlisteToNextcloud().catch(function(){});
-    }
+    if(nc.url){ pushToNextcloud(); }
     if(gd.fileId){ pushToGDrive().catch(function(){}); }
   }, 1500);
 }
@@ -825,7 +736,6 @@ function renderTabbar(){
   var tabs = [
     {id:"regal", ic:"▤", lb:"Regal"},
     {id:"search", ic:"⌕", lb:"Suche"},
-    {id:"wishlist", ic:"⇄", lb:"Tauschen"},
     {id:"more", ic:"≡", lb:"Mehr"}
   ];
   return '<div class="tabbar"><div class="tabbar-inner">' + tabs.map(function(t){
@@ -834,11 +744,10 @@ function renderTabbar(){
   }).join('') + '<button class="fab" data-newbook="1" aria-label="Buch erfassen">+</button></div></div>';
 }
 function spineCardHtml(b){
-  var trade = b.tauschbar==="Ja" ? tradeIconHtml(false) : '';
   if(hasCover(b)){
-    return '<div class="spine" style="'+coverBgStyle(b)+'" data-edit="'+esc(b.titel)+'">'+trade+'</div>';
+    return '<div class="spine" style="'+coverBgStyle(b)+'" data-edit="'+esc(b.titel)+'"></div>';
   }
-  return '<div class="spine" style="'+coverBgStyle(b)+'" data-edit="'+esc(b.titel)+'">'+trade+
+  return '<div class="spine" style="'+coverBgStyle(b)+'" data-edit="'+esc(b.titel)+'">'+
     '<div class="inner"><div class="stripe"></div>'+
     '<div class="name">'+esc(b.titel)+'</div>'+
     '<div class="meta">'+esc(b.autor||"—")+'<br>'+esc(b.ausgabe||"")+' · '+esc(b.jahr||"?")+'</div>'+
@@ -847,12 +756,12 @@ function spineCardHtml(b){
 function listCardHtml(b){
   var zc = zustandClass(b.zustand);
   return '<button class="card" data-edit="'+esc(b.titel)+'">'+
-    '<div class="thumb" style="'+coverBgStyle(b)+'">'+(b.tauschbar==="Ja"?tradeIconHtml(true):'')+'</div>'+
+    '<div class="thumb" style="'+coverBgStyle(b)+'"></div>'+
     '<div class="body">'+
       '<div class="title">'+esc(b.titel)+'</div>'+
       '<div class="sub">'+esc(b.autor||"—")+' · '+esc(b.jahr||"?")+' · '+esc(b.ausgabe||"")+'</div>'+
     '</div>'+
-    '<div class="end">'+(b.zustand?'<span class="badge '+zc+'">'+esc(b.zustand)+'</span>':'')+tauschbarBadge(b)+(b.seiten?'<span class="pages tnum">'+esc(b.seiten)+' S.</span>':'')+'</div>'+
+    '<div class="end">'+(b.zustand?'<span class="badge '+zc+'">'+esc(b.zustand)+'</span>':'')+(b.seiten?'<span class="pages tnum">'+esc(b.seiten)+' S.</span>':'')+(parseBewertung(b.bewertung)?starsHtml(b.bewertung):'')+'</div>'+
   '</button>';
 }
 function viewRegal(){
@@ -946,6 +855,8 @@ function viewMore(){
 function viewStats(){
   var books = state.books;
   var total = books.length, sumSeiten = totalSeiten(), avgSeiten = total ? Math.round(sumSeiten/total) : 0;
+  var ratedBooks = books.filter(function(b){ return parseBewertung(b.bewertung) > 0; });
+  var avgRating = ratedBooks.length ? (ratedBooks.reduce(function(a,b){ return a+parseBewertung(b.bewertung); },0) / ratedBooks.length) : 0;
   var years = books.map(function(b){ return parseInt(b.jahr,10); }).filter(function(y){ return y && !isNaN(y); });
   var yrRange = years.length ? (Math.min.apply(null,years)+" – "+Math.max.apply(null,years)) : "—";
   function counts(field){
@@ -967,6 +878,7 @@ function viewStats(){
     '<div class="stat-tile"><div class="lb">Gelesen</div><div class="v accent tnum">'+readCount()+' / '+total+'</div></div>'+
     '<div class="stat-tile"><div class="lb">Seiten gesamt</div><div class="v tnum">'+sumSeiten.toLocaleString("de-DE")+'</div></div>'+
     '<div class="stat-tile"><div class="lb">Ø Seiten / Buch</div><div class="v tnum">'+avgSeiten.toLocaleString("de-DE")+'</div></div>'+
+    '<div class="stat-tile"><div class="lb">Ø Bewertung</div><div class="v accent tnum">'+(avgRating?avgRating.toFixed(1)+' ★':'—')+'</div></div>'+
   '</div>';
   html += '<div class="stat-grid" style="grid-template-columns:1fr">'+
     '<div class="stat-tile"><div class="lb">Jahresspanne</div><div class="v tnum" style="font-size:17px">'+yrRange+'</div></div>'+
@@ -1021,7 +933,7 @@ function viewSync(){
     '<div class="actions" style="margin-top:14px"><button class="btn ghost" id="btnExport">Exportieren</button><button class="btn ghost" id="btnImport">Importieren…</button></div>'+
     '<input type="file" accept=".csv,text/csv" class="filepick" id="filePick"></div>';
 
-  html += '<div class="sync-card"><h3>Einstellungen sichern &amp; wiederherstellen</h3><p>Cloud-Zugangsdaten und Freundesliste liegen nur lokal in diesem Browser – beim Löschen von Cookies/Website-Daten sind sie weg (genau wie eine nicht per Cloud gesicherte Büchersammlung). Mit „Sichern" lädst du eine kleine Backup-Datei herunter, die du z. B. selbst irgendwo ablegst; mit „Wiederherstellen" spielst du sie nach einem Datenverlust wieder ein.</p>'+
+  html += '<div class="sync-card"><h3>Einstellungen sichern &amp; wiederherstellen</h3><p>Cloud-Zugangsdaten liegen nur lokal in diesem Browser – beim Löschen von Cookies/Website-Daten sind sie weg (genau wie eine nicht per Cloud gesicherte Büchersammlung). Mit „Sichern" lädst du eine kleine Backup-Datei herunter, die du z. B. selbst irgendwo ablegst; mit „Wiederherstellen" spielst du sie nach einem Datenverlust wieder ein.</p>'+
     '<div class="actions" style="margin-top:14px"><button class="btn ghost" id="btnExportSettings">Sichern</button><button class="btn ghost" id="btnImportSettings">Wiederherstellen…</button></div>'+
     '<input type="file" accept=".json,application/json" class="filepick" id="filePickSettings">'+
     '<div class="pcnote" style="margin-top:12px">Diese Datei enthält Klartext-Zugangsdaten (u. a. dein Nextcloud-Passwort) – bewusst NICHT Teil der Bücher-CSV, damit sie nicht versehentlich mit Freunden geteilt oder auf Nextcloud hochgeladen wird. Bitte entsprechend privat aufbewahren.</div>'+
@@ -1031,82 +943,10 @@ function viewSync(){
   html += '</div>';
   return html;
 }
-function friendCardHtml(b, isNew){
-  var zc = zustandClass(b.zustand);
-  return '<div class="card" style="cursor:default">'+
-    '<div class="thumb" style="'+coverBgStyle(b)+'"></div>'+
-    '<div class="body"><div class="title">'+esc(b.titel)+'</div><div class="sub">'+esc(b.autor||"—")+' · '+esc(b.jahr||"?")+'</div></div>'+
-    '<div class="end">'+(isNew?'<span class="badge trade">Neu</span>':'')+(b.zustand?'<span class="badge '+zc+'">'+esc(b.zustand)+'</span>':'')+'</div>'+
-  '</div>';
-}
-function viewWishlist(){
-  var mine = state.books.filter(function(b){ return b.tauschbar==="Ja"; }).sort(function(a,b){ return a.titel.localeCompare(b.titel,"de"); });
-  var friends = loadFriends();
-  var profile = loadProfile();
-  var nc = loadNC();
-
-  var html = '<div class="bar"><div class="eyebrow">Tauschbörse</div><h1>Tauschen</h1>'+
-    '<div class="detail-line" style="color:var(--shelf-ink-dim);margin-top:3px">'+mine.length+' eigene Bücher als tauschbar markiert</div></div>';
-  html += '<div class="content">';
-
-  html += '<div class="section-title">Meine tauschbaren Bücher</div>';
-  html += mine.length
-    ? '<div class="list">'+mine.map(listCardHtml).join('')+'</div>'
-    : '<div class="empty">Noch keine Bücher als „Tauschbar“ markiert. Öffne ein Buch → Bearbeiten → Haken bei „Tauschbar“ setzen.</div>';
-
-  html += '<div class="section-title">Meine Sammlung veröffentlichen</div>';
-  html += '<div class="sync-card" style="margin:0 16px 20px"><h3>Einladungslink für Freunde</h3>'+
-    '<p>Erzeugt eine kleine Datei mit nur deinen tauschbaren Büchern. Lade sie irgendwo mit öffentlichem Link hoch (z. B. Nextcloud → Datei → Teilen → Link erstellen → „Direkter Download-Link“) und schick diesen Link an Freunde – die tragen ihn dann bei sich unter „Freund hinzufügen“ ein.</p>'+
-    '<div class="form" style="padding:12px 0 0;gap:10px">'+
-      '<div class="field"><div class="lb">Dein Anzeigename</div><input type="text" id="f_displayname" value="'+esc(profile.displayName||"")+'"></div>'+
-    '</div>'+
-    '<div class="actions" style="margin-top:12px"><button class="btn ghost" id="btnExportTausch">Als Datei exportieren</button>'+
-      (nc.url ? '<button class="btn primary" id="btnPushTausch">Zu Nextcloud hochladen</button>' : '')+
-    '</div>'+
-    (nc.url ? '<div class="pcnote" style="margin-top:12px">Landet als „tauschliste.json“ neben deiner Sync-Datei auf Nextcloud. Dort musst du einmalig einen öffentlichen Freigabelink dafür erstellen – das kann ich von hier aus nicht selbst einrichten.</div>' : '')+
-  '</div>';
-
-  html += '<div class="section-title">Freunde</div>';
-  if(!friends.length){
-    html += '<div class="empty">Noch keine Freunde hinzugefügt.</div>';
-  } else {
-    friends.forEach(function(f){
-      var cache = friendDataCache[f.url];
-      if(!cache) fetchFriendList(f);
-      var newCount = (cache && cache.newTitles) ? cache.newTitles.length : 0;
-      html += '<div class="sync-card" style="margin:0 16px 12px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center"><h3>'+esc(f.name)+(newCount?' <span class="badge trade">+'+newCount+' neu</span>':'')+'</h3><button class="linkbtn" data-removefriend="'+esc(f.url)+'">Entfernen</button></div>';
-      if(!cache || cache.status==="loading"){
-        html += '<p><span class="spin"></span>Lädt…</p>';
-      } else if(cache.status==="error"){
-        html += '<p>'+esc(cache.error)+'</p>';
-      } else if(!cache.books.length){
-        html += '<p>Aktuell keine tauschbaren Bücher veröffentlicht.</p>';
-      } else {
-        var newSet = {};
-        (cache.newTitles||[]).forEach(function(n){ newSet[n] = true; });
-        html += '<div class="list" style="padding:10px 0 0">'+cache.books.map(function(b){ return friendCardHtml(b, !!newSet[b.titel]); }).join('')+'</div>';
-      }
-      html += '</div>';
-    });
-  }
-
-  html += '<div class="sync-card" style="margin:0 16px 20px"><h3>Freund hinzufügen</h3>'+
-    '<div class="form" style="padding:10px 0 0;gap:10px">'+
-      '<div class="field"><div class="lb">Name</div><input type="text" id="f_friendname" placeholder="z. B. Max"></div>'+
-      '<div class="field"><div class="lb">Sein Einladungslink</div><input type="url" id="f_friendurl" placeholder="https://…/tauschliste.json"></div>'+
-    '</div>'+
-    '<button class="btn primary full" style="margin-top:12px" id="btnAddFriend">Hinzufügen</button>'+
-  '</div>';
-
-  html += '<div class="pcnote">Es gibt keinen eigenen Server dafür – jeder Link zeigt direkt auf die Datei eines Freundes. Ob das klappt, hängt davon ab, ob der jeweilige Speicherort browserseitige Anfragen (CORS) erlaubt.</div>';
-  html += '</div>' + renderTabbar();
-  return html;
-}
 function fieldRow(k,v){ return '<div class="row"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v||"—")+'</div></div>'; }
 var ZUSTAND_OPTIONS = ["Neu (eingeschweißt)","Neuwertig","Sehr Gut","Gut","Akzeptabel"];
 var AUSGABE_OPTIONS = ["Hardcover","Taschenbuch","Ebook","Hörbuch","Sonderausgabe"];
-var BLANK_BOOK = {titel:"",sprache:"",ausgabe:"",zustand:"",notizen:"",gelesen:"",verlag:"",jahr:"",autor:"",isbn:"",coverBase64:"",coverExt:"",genre:"",seiten:"",tauschbar:""};
+var BLANK_BOOK = {titel:"",sprache:"",ausgabe:"",zustand:"",notizen:"",gelesen:"",verlag:"",jahr:"",autor:"",isbn:"",coverBase64:"",coverExt:"",genre:"",seiten:"",bewertung:"0"};
 
 function viewEdit(){
   var isNew = state.editing === null;
@@ -1114,6 +954,11 @@ function viewEdit(){
 
   function pillrow(name, options, current){
     return '<div class="pillrow">'+options.map(function(o){ return '<button type="button" class="pill'+(o===current?' active':'')+'" data-pill="'+name+'" data-val="'+esc(o)+'">'+esc(o)+'</button>'; }).join('')+'</div>';
+  }
+  function starsEditorHtml(current){
+    var out = '<div class="starsrow" data-current="'+current+'">';
+    for(var i=1;i<=5;i++){ out += '<button type="button" class="starbtn" data-star="'+i+'">'+(i<=current?'★':'☆')+'</button>'; }
+    return out + '</div>';
   }
   var html = '<div class="backbar"><button class="hdrbtn ghost" data-canceledit="1">Abbrechen</button><div class="title center">'+(isNew?'BUCH ERFASSEN':'BEARBEITEN')+'</div><button class="hdrbtn accent" id="btnSave">Speichern</button></div>';
   html += '<div class="form">';
@@ -1151,7 +996,7 @@ function viewEdit(){
   html += '<div class="field"><div class="lb">Sprache</div><input type="text" id="f_sprache" value="'+esc(b.sprache)+'"></div>';
   html += '<div class="field"><div class="lb">Notizen</div><textarea id="f_notizen">'+esc(b.notizen)+'</textarea></div>';
   html += '<label class="checkline"><input type="checkbox" id="f_gelesen" '+(b.gelesen==="Ja"?"checked":"")+'><span>Gelesen</span></label>';
-  html += '<label class="checkline"><input type="checkbox" id="f_tauschbar" '+(b.tauschbar==="Ja"?"checked":"")+'><span>Tauschbar</span></label>';
+  html += '<div class="field"><div class="lb">Bewertung</div>'+starsEditorHtml(parseBewertung(b.bewertung))+'</div>';
   html += '<div class="field"><div class="lb">Zustand</div>'+pillrow("zustand",ZUSTAND_OPTIONS,b.zustand)+'</div>';
   html += '<div class="field"><div class="lb">Ausgabe</div>'+pillrow("ausgabe",AUSGABE_OPTIONS,b.ausgabe)+'</div>';
   if(!isNew){
@@ -1171,7 +1016,6 @@ function render(){
     case "more": html = viewMore(); break;
     case "stats": html = viewStats(); break;
     case "sync": html = viewSync(); break;
-    case "wishlist": html = viewWishlist(); break;
     case "edit": html = viewEdit(); break;
     default: html = viewRegal();
   }
@@ -1197,11 +1041,7 @@ function wireToastEvents(){
 
 function wireEvents(root){
   root.querySelectorAll("[data-tab]").forEach(function(el){
-    el.addEventListener("click", function(){
-      var tab = el.getAttribute("data-tab");
-      if(tab === "wishlist"){ friendDataCache = {}; }
-      go(tab);
-    });
+    el.addEventListener("click", function(){ go(el.getAttribute("data-tab")); });
   });
   root.querySelectorAll("[data-canceledit]").forEach(function(el){
     el.addEventListener("click", function(){
@@ -1242,6 +1082,19 @@ function wireEvents(root){
       var group = el.getAttribute("data-pill");
       root.querySelectorAll('[data-pill="'+group+'"]').forEach(function(p){ p.classList.remove("active"); });
       el.classList.add("active");
+    });
+  });
+  root.querySelectorAll(".starbtn").forEach(function(el){
+    el.addEventListener("click", function(){
+      var group = el.closest(".starsrow");
+      var val = parseInt(el.getAttribute("data-star"),10);
+      var cur = parseInt(group.getAttribute("data-current"),10) || 0;
+      var next = (cur === val) ? 0 : val;
+      group.setAttribute("data-current", String(next));
+      group.querySelectorAll(".starbtn").forEach(function(s){
+        var sv = parseInt(s.getAttribute("data-star"),10);
+        s.textContent = sv <= next ? "★" : "☆";
+      });
     });
   });
 
@@ -1355,7 +1208,8 @@ function wireEvents(root){
       base.sprache = document.getElementById("f_sprache").value;
       base.notizen = document.getElementById("f_notizen").value;
       base.gelesen = document.getElementById("f_gelesen").checked ? "Ja" : "Nein";
-      base.tauschbar = document.getElementById("f_tauschbar").checked ? "Ja" : "Nein";
+      var starsGroup = root.querySelector(".starsrow");
+      base.bewertung = starsGroup ? starsGroup.getAttribute("data-current") : "0";
       var zPicked = root.querySelector('[data-pill="zustand"].active');
       if(zPicked) base.zustand = zPicked.getAttribute("data-val");
       var aPicked = root.querySelector('[data-pill="ausgabe"].active');
@@ -1409,7 +1263,7 @@ function wireEvents(root){
     });
   }
 
-  /* Settings backup/restore (Nextcloud/Google Drive credentials, friends, profile) */
+  /* Settings backup/restore (Nextcloud/Google Drive credentials) */
   var btnExportSettings = document.getElementById("btnExportSettings");
   if(btnExportSettings){
     btnExportSettings.addEventListener("click", function(){
@@ -1417,8 +1271,7 @@ function wireEvents(root){
       var backup = {
         type: "buecher-settings-backup", version: 1, exportedAt: new Date().toISOString(),
         nextcloud: loadNC(),
-        gdrive: { clientId: gd.clientId||"", fileId: gd.fileId||"" },
-        profile: loadProfile(), friends: loadFriends()
+        gdrive: { clientId: gd.clientId||"", fileId: gd.fileId||"" }
       };
       var blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json"});
       var a = document.createElement("a");
@@ -1441,12 +1294,10 @@ function wireEvents(root){
         var data;
         try{ data = JSON.parse(String(reader.result)); }catch(e){ data = null; }
         if(!data || data.type !== "buecher-settings-backup"){ showToast("Keine gültige Einstellungen-Sicherung."); return; }
-        state.confirm = { title:"Einstellungen wiederherstellen?", msg:"Überschreibt Nextcloud-/Google-Drive-Zugangsdaten, Profil und Freundesliste auf diesem Gerät mit dem Stand aus der Sicherung.", okLabel:"Wiederherstellen",
+        state.confirm = { title:"Einstellungen wiederherstellen?", msg:"Überschreibt Nextcloud-/Google-Drive-Zugangsdaten auf diesem Gerät mit dem Stand aus der Sicherung.", okLabel:"Wiederherstellen",
           onOk:function(){
             if(data.nextcloud) saveNC(data.nextcloud);
             if(data.gdrive) saveGDrive({ clientId: data.gdrive.clientId||"", fileId: data.gdrive.fileId||"" });
-            if(data.profile) saveProfile(data.profile);
-            if(data.friends) saveFriends(data.friends);
             showToast("Einstellungen wiederhergestellt.");
             go("more");
           } };
@@ -1550,60 +1401,6 @@ function wireEvents(root){
         .catch(function(err){ showToast("Hochladen fehlgeschlagen: " + err.message); });
     });
   }
-
-  /* Tauschbörse */
-  var f_displayname = document.getElementById("f_displayname");
-  if(f_displayname){
-    f_displayname.addEventListener("change", function(){
-      saveProfile({ displayName: f_displayname.value.trim() });
-    });
-  }
-  var btnExportTausch = document.getElementById("btnExportTausch");
-  if(btnExportTausch){
-    btnExportTausch.addEventListener("click", function(){
-      var name = document.getElementById("f_displayname");
-      if(name) saveProfile({ displayName: name.value.trim() });
-      exportTauschlisteFile();
-      showToast("Tauschliste exportiert.");
-    });
-  }
-  var btnPushTausch = document.getElementById("btnPushTausch");
-  if(btnPushTausch){
-    btnPushTausch.addEventListener("click", function(){
-      var name = document.getElementById("f_displayname");
-      if(name) saveProfile({ displayName: name.value.trim() });
-      showToast("Lade hoch…");
-      pushTauschlisteToNextcloud().then(function(url){
-        showToast("Hochgeladen. Jetzt in Nextcloud einen öffentlichen Link für „tauschliste.json“ erstellen.");
-      }).catch(function(err){ showToast("Fehlgeschlagen: " + err.message); });
-    });
-  }
-  var btnAddFriend = document.getElementById("btnAddFriend");
-  if(btnAddFriend){
-    btnAddFriend.addEventListener("click", function(){
-      var name = document.getElementById("f_friendname").value.trim();
-      var url = document.getElementById("f_friendurl").value.trim();
-      if(!name || !url){ showToast("Bitte Name und Link eintragen."); return; }
-      var friends = loadFriends();
-      friends.push({ name: name, url: url });
-      saveFriends(friends);
-      delete friendDataCache[url];
-      showToast("Freund hinzugefügt.");
-      render();
-    });
-  }
-  root.querySelectorAll("[data-removefriend]").forEach(function(el){
-    el.addEventListener("click", function(){
-      var url = el.getAttribute("data-removefriend");
-      var friends = loadFriends().filter(function(f){ return f.url !== url; });
-      saveFriends(friends);
-      delete friendDataCache[url];
-      var seenAll = loadFriendSeen();
-      delete seenAll[url];
-      saveFriendSeen(seenAll);
-      render();
-    });
-  });
 }
 
 /* ---------------- boot ---------------- */
