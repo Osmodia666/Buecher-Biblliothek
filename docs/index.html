@@ -115,8 +115,9 @@ input,select,textarea,button{font-family:inherit}
 .tab.active{color:var(--brass-bright)}
 .tab .ic{font:400 18px/1 'IBM Plex Mono',monospace}
 .tab .lb{font:500 9.5px/1 'IBM Plex Sans',sans-serif;letter-spacing:.02em}
-.fabslot{flex:1;display:flex;justify-content:center;align-items:flex-start}
-.fab{transform:translateY(-58%);width:56px;height:56px;border-radius:50%;background:linear-gradient(160deg,var(--brass-bright),var(--brass));border:4px solid var(--paper);box-shadow:0 8px 18px -6px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1c1a16;font:400 26px/1 'IBM Plex Sans',sans-serif}
+.fabwrap{position:fixed;left:0;right:0;bottom:calc(80px + env(safe-area-inset-bottom));display:flex;justify-content:center;pointer-events:none;z-index:40}
+.fabwrap-inner{max-width:480px;width:calc(100% - 24px);margin:0 12px;display:flex;justify-content:center}
+.fab{pointer-events:auto;width:56px;height:56px;border-radius:50%;background:linear-gradient(160deg,var(--brass-bright),var(--brass));border:4px solid var(--paper);box-shadow:0 8px 18px -6px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1c1a16;font:400 26px/1 'IBM Plex Sans',sans-serif}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .fab{border-color:var(--paper)} }
 :root[data-theme="dark"] .fab{border-color:var(--paper)}
 
@@ -217,6 +218,7 @@ input,select,textarea,button{font-family:inherit}
   .detail-hero,.form,.sync-body,.stat-grid,.bars,.menu,.empty{max-width:680px;margin-left:auto;margin-right:auto}
   .stat-grid{grid-template-columns:repeat(4,1fr)}
   .tabbar-inner{max-width:560px}
+  .fabwrap-inner{max-width:560px}
 }
 </style>
 </head>
@@ -798,11 +800,8 @@ function renderTabbar(){
     var active = (state.view===t.id) || (t.id==="more" && (state.view==="stats" || state.view==="sync"));
     return '<button class="tab'+(active?' active':'')+'" data-tab="'+t.id+'"><span class="ic">'+t.ic+'</span><span class="lb">'+t.lb+'</span></button>';
   }
-  return '<div class="tabbar"><div class="tabbar-inner">'+
-    tabHtml(tabs[0]) + tabHtml(tabs[1]) +
-    '<div class="fabslot"><button class="fab" data-newbook="1" aria-label="Buch erfassen">+</button></div>'+
-    tabHtml(tabs[2]) +
-  '</div></div>';
+  return '<div class="tabbar"><div class="tabbar-inner">'+tabs.map(tabHtml).join('')+'</div></div>'+
+    '<div class="fabwrap"><div class="fabwrap-inner"><button class="fab" data-newbook="1" aria-label="Buch erfassen">+</button></div></div>';
 }
 function spineCardHtml(b){
   if(hasCover(b)){
